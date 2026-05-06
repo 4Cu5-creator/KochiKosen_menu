@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -126,8 +126,8 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-logo"><span>Shokudo</span>Admin Panel</div>
-    <a class="nav-item active" href="/admin">📤 อัปโหลดเมนู</a>
-    <a class="nav-item" href="/">👀 ดูเมนู (หน้าหลัก)</a>
+    <a class="nav-item active" href="/admin">📤 Upload Menu</a>
+    <a class="nav-item" href="/">👀 View Menu (Home)</a>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-footer">shokudou_menu v2.0</div>
   </aside>
@@ -135,9 +135,9 @@
   <!-- Main -->
   <div class="main-area">
     <div class="topbar">
-      <h1>📤 อัปโหลดและอัปเดตเมนูประจำสัปดาห์</h1>
+      <h1>📤 Upload and Update Weekly Menu</h1>
       <div class="topbar-right">
-        <a href="/" class="btn btn-secondary btn-sm">👀 ดูเมนู</a>
+        <a href="/" class="btn btn-secondary btn-sm">👀 View Menu</a>
       </div>
     </div>
 
@@ -146,11 +146,11 @@
       <div style="background:var(--surface); padding:1.5rem; border-radius:var(--radius); border:1px solid var(--border); margin-bottom:1.5rem; display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
         <div style="font-size:2rem;">🌐</div>
         <div style="flex:1;">
-          <div style="font-weight:600; margin-bottom:0.25rem;">ดึงข้อมูลจากเว็บไซต์อัตโนมัติ (PDF)</div>
-          <div style="font-size:0.82rem; color:var(--text2); margin-bottom:0.75rem;">ระบุวันที่เริ่มต้นสัปดาห์ (วันจันทร์) เพื่อดึงตารางเมนู PDF จากเว็บโรงเรียน Kochi KOSEN</div>
+          <div style="font-weight:600; margin-bottom:0.25rem;">Automatic Sync from Website (PDF)</div>
+          <div style="font-size:0.82rem; color:var(--text2); margin-bottom:0.75rem;">Select Monday of the week to fetch the menu PDF from Kochi KOSEN website</div>
           <div style="display:flex; gap:0.5rem; align-items:center;">
             <input type="date" id="fetchDate" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-family:inherit;">
-            <button class="btn btn-primary btn-sm" onclick="fetchFromUrl()">ดึงข้อมูลอัตโนมัติ</button>
+            <button class="btn btn-primary btn-sm" onclick="fetchFromUrl()">Sync Automatically</button>
           </div>
         </div>
       </div>
@@ -159,9 +159,9 @@
       <div class="upload-zone" id="uploadZone">
         <input type="file" id="menuFile" accept="image/*">
         <div class="upload-icon">📋</div>
-        <div class="upload-title">อัปโหลดรูปตารางเมนูประจำสัปดาห์</div>
-        <div class="upload-sub">ถ่ายรูปหรือสแกนตารางเมนู แล้ววางหรือคลิกเพื่อเลือกไฟล์</div>
-        <div class="upload-hint">รองรับ: JPG, PNG · AI จะอ่านตารางและเติมข้อมูลให้อัตโนมัติ</div>
+        <div class="upload-title">Upload Weekly Menu Table Image</div>
+        <div class="upload-sub">Photo or scan the menu table, then drop or click to select file</div>
+        <div class="upload-hint">Supports: JPG, PNG · AI will automatically parse and fill data</div>
       </div>
 
       <!-- Status -->
@@ -170,22 +170,22 @@
       <!-- Editor panel -->
       <div class="editor-panel" id="editorPanel">
         <div class="editor-hdr">
-          <h2>✏️ ตรวจสอบและแก้ไขข้อมูลก่อนบันทึก</h2>
+          <h2>✏️ Verify and Edit Data Before Saving</h2>
           <div style="display:flex;gap:.5rem">
-            <button class="btn btn-secondary btn-sm" onclick="clearEditor()">✕ ยกเลิก</button>
-            <button class="btn btn-primary btn-sm" onclick="saveMenu()">💾 บันทึกลง Database</button>
+            <button class="btn btn-secondary btn-sm" onclick="clearEditor()">✕ Cancel</button>
+            <button class="btn btn-primary btn-sm" onclick="saveMenu()">💾 Save to Database</button>
           </div>
         </div>
         <div class="editor-layout">
           <div class="editor-img">
-            <img id="previewImg" src="" alt="เมนูที่อัปโหลด" style="max-width:100%; border-radius:var(--radius-sm);">
+            <img id="previewImg" src="" alt="Uploaded Menu" style="max-width:100%; border-radius:var(--radius-sm);">
             <iframe id="previewPdf" style="display:none; width:100%; height:100%; min-height:400px; border:none; border-radius:var(--radius-sm);"></iframe>
           </div>
           <div class="editor-form" id="editorForm">
             <div class="week-start-row">
-              <label>วันเริ่มต้นสัปดาห์</label>
+              <label>Week Starting (Monday)</label>
               <input type="date" id="weekStart">
-              <button class="btn btn-secondary btn-sm" onclick="rebuildForm()">🔄 สร้างฟอร์มใหม่</button>
+              <button class="btn btn-secondary btn-sm" onclick="rebuildForm()">🔄 Rebuild Form</button>
             </div>
             <div id="dayForms"></div>
           </div>
@@ -195,22 +195,22 @@
       <!-- DB Records -->
       <div class="db-section">
         <div class="section-title">
-          <span>📊 ข้อมูลใน Database</span>
+          <span>📊 Database Records</span>
           <div style="display:flex;gap:.5rem">
-            <button class="btn btn-danger btn-sm" onclick="deleteAll()">🗑️ ลบทั้งหมด</button>
-            <button class="btn btn-secondary btn-sm" onclick="loadDbPreview()">🔄 รีเฟรช</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteAll()">🗑️ Delete All</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadDbPreview()">🔄 Refresh</button>
           </div>
         </div>
-        <div id="dbPreview"><div style="color:var(--text3);font-size:.82rem">กำลังโหลด...</div></div>
+        <div id="dbPreview"><div style="color:var(--text3);font-size:.82rem">Loading...</div></div>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-const DAY_TH=['จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์','อาทิตย์'];
+const DAY_TH=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const DAY_JP=['月','火','水','木','金','土','日'];
-const MEAL_DEFS=[{key:'朝食',icon:'🌅',label:'มื้อเช้า'},{key:'昼食',icon:'☀️',label:'มื้อกลางวัน'},{key:'夕食',icon:'🌙',label:'มื้อเย็น'}];
+const MEAL_DEFS=[{key:'朝食',icon:'🌅',label:'Breakfast'},{key:'昼食',icon:'☀️',label:'Lunch'},{key:'夕食',icon:'🌙',label:'Dinner'}];
 
 // Upload zone
 const zone = document.getElementById('uploadZone');
@@ -228,7 +228,7 @@ function hideStatus() { document.getElementById('statusBar').className='status-b
 
 async function handleFile(file) {
   if (!file || !file.type.startsWith('image/')) {
-    setStatus('⚠️ กรุณาเลือกไฟล์รูปภาพ (JPG/PNG)', 'error'); return;
+    setStatus('⚠️ Please select an image file (JPG/PNG)', 'error'); return;
   }
 
   // Setup default dates
@@ -248,7 +248,7 @@ async function handleFile(file) {
   reader.readAsDataURL(file);
 
   // Call backend to parse with Gemini (no api_key needed — set in app.py)
-  setStatus('🤖 AI กำลังอ่านตารางเมนู... อาจใช้เวลา 10-20 วินาที', 'info');
+  setStatus('🤖 AI is reading the menu table... This may take 10-20 seconds', 'info');
   const formData = new FormData();
   formData.append('image', file);
   try {
@@ -260,13 +260,13 @@ async function handleFile(file) {
         const startDate = result.data.days[0].date;
         document.getElementById('weekStart').value = startDate;
         buildDayForms(startDate, result.data.days);
-        setStatus(`✅ AI อ่านได้ ${result.data.days.length} วัน — กรุณาตรวจสอบก่อนบันทึก`, 'success');
+        setStatus(`✅ AI parsed ${result.data.days.length} days — please verify before saving`, 'success');
       } else {
         buildDayForms(document.getElementById('weekStart').value);
-        setStatus('⚠️ AI อ่านได้บางส่วน กรุณาตรวจสอบและแก้ไขเพิ่มเติม', 'info');
+        setStatus('⚠️ AI parsed partially. Please check and edit as needed', 'info');
       }
     } catch(e) {
-      setStatus('❌ AI อ่านไม่ได้: '+e.message, 'error');
+      setStatus('❌ AI failed to read: '+e.message, 'error');
       buildDayForms(document.getElementById('weekStart').value);
     }
 }
@@ -285,9 +285,9 @@ initDefaultDate();
 
 async function fetchFromUrl() {
   const dateStr = document.getElementById('fetchDate').value;
-  if (!dateStr) return setStatus('⚠️ กรุณาเลือกวันที่ก่อน', 'error');
+  if (!dateStr) return setStatus('⚠️ Please select a date first', 'error');
   
-  setStatus(`🤖 กำลังดาวน์โหลดและให้ AI อ่าน PDF ของวันที่ ${dateStr}... (อาจใช้เวลา 10-20 วินาที)`, 'info');
+  setStatus(`🤖 Downloading and AI parsing PDF for ${dateStr}... (may take 10-20 seconds)`, 'info');
   document.getElementById('editorPanel').classList.add('visible');
   document.getElementById('previewImg').style.display = 'none';
   document.getElementById('previewPdf').style.display = 'none';
@@ -309,14 +309,14 @@ async function fetchFromUrl() {
       const startDate = result.data.days[0].date;
       document.getElementById('weekStart').value = startDate;
       buildDayForms(startDate, result.data.days);
-      setStatus(`✅ AI อ่านได้ ${result.data.days.length} วัน — กรุณาตรวจสอบก่อนบันทึก`, 'success');
+      setStatus(`✅ AI parsed ${result.data.days.length} days — please verify before saving`, 'success');
     } else {
       document.getElementById('weekStart').value = dateStr;
       buildDayForms(dateStr);
-      setStatus('⚠️ AI อ่านได้บางส่วน กรุณาตรวจสอบและแก้ไขเพิ่มเติม', 'info');
+      setStatus('⚠️ AI parsed partially. Please check and edit as needed', 'info');
     }
   } catch(e) {
-    setStatus('❌ AI อ่านไม่ได้: ' + e.message, 'error');
+    setStatus('❌ AI failed to read: ' + e.message, 'error');
     document.getElementById('weekStart').value = dateStr;
     buildDayForms(dateStr);
   }
@@ -335,18 +335,18 @@ function buildDayForms(startIso, prefilled) {
     const wi = (dd.getDay()+6)%7;
     const aiDay = prefilled?.find(x=>x.date===dateStr);
     html += `<div class="day-block">
-      <div class="day-title">📅 ${dd.getDate()}/${dd.getMonth()+1} วัน${DAY_TH[wi]} (${DAY_JP[wi]})</div>
+      <div class="day-title">📅 ${dd.getDate()}/${dd.getMonth()+1} ${DAY_TH[wi]} (${DAY_JP[wi]})</div>
       <div class="day-meals">`;
     MEAL_DEFS.forEach(m=>{
       const ex = aiDay?.[m.key] || {};
       html += `<div class="meal-row">
         <div class="meal-icon">${m.icon}</div>
         <div class="meal-field">
-          <label>${m.label} — รายการ (คั่นด้วยจุลภาค)</label>
+          <label>${m.label} — Items (comma separated)</label>
           <textarea rows="2" id="items_${dateStr}_${m.key}">${(ex.items||[]).join(',')}</textarea>
         </div>
         <div class="meal-field">
-          <label>แคลอรี่</label>
+          <label>Calories</label>
           <input type="text" id="kcal_${dateStr}_${m.key}" placeholder="900kcal" value="${ex.kcal||''}">
         </div>
       </div>`;
@@ -365,7 +365,7 @@ function clearEditor() {
 
 async function saveMenu() {
   const startVal = document.getElementById('weekStart').value;
-  if (!startVal) { alert('กรุณาระบุวันเริ่มต้นสัปดาห์'); return; }
+  if (!startVal) { alert('Please specify the week start date'); return; }
   const start = new Date(startVal+'T00:00:00');
   const payload = {};
   for (let i=0;i<7;i++) {
@@ -379,18 +379,18 @@ async function saveMenu() {
       if (items.length) payload[dateStr][m.key] = {main:'', items, kcal};
     });
   }
-  setStatus('💾 กำลังบันทึก...', 'info');
+  setStatus('💾 Saving...', 'info');
   try {
     const res = await fetch('/api/menu/save', {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
     });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error);
-    setStatus(`✅ บันทึกสำเร็จ! ${result.saved} รายการ — ข้อมูลพร้อมแสดงในหน้าเมนูแล้ว`, 'success');
+    setStatus(`✅ Save successful! ${result.saved} items — Ready to display on menu page`, 'success');
     clearEditor();
     loadDbPreview();
   } catch(e) {
-    setStatus('❌ บันทึกไม่สำเร็จ: '+e.message, 'error');
+    setStatus('❌ Save failed: '+e.message, 'error');
   }
 }
 
@@ -402,11 +402,11 @@ async function loadDbPreview() {
     const dates = Object.keys(data).sort();
     if (!dates.length) {
       document.getElementById('dbPreview').innerHTML =
-        '<div style="color:var(--text3);font-size:.82rem;padding:1rem 0">ยังไม่มีข้อมูลใน database</div>';
+        '<div style="color:var(--text3);font-size:.82rem;padding:1rem 0">No data in database</div>';
       return;
     }
     const BADGE = {'朝食':'badge-asa','昼食':'badge-hiru','夕食':'badge-yu'};
-    const MLABEL = {'朝食':'เช้า','昼食':'กลางวัน','夕食':'เย็น'};
+    const MLABEL = {'朝食':'Morning','昼食':'Lunch','夕食':'Dinner'};
     let rows = '';
     dates.forEach(d=>{
       const dd = new Date(d+'T00:00:00');
@@ -417,7 +417,7 @@ async function loadDbPreview() {
         if (firstMeal) {
           rows += `<td rowspan="${mealCount}">
             ${dd.getDate()}/${dd.getMonth()+1}/${dd.getFullYear()}<br>
-            <button class="btn btn-danger btn-sm" style="margin-top:4px; padding:2px 6px; font-size:0.7rem;" onclick="deleteDay('${d}')">🗑️ ลบทั้งวัน</button>
+            <button class="btn btn-danger btn-sm" style="margin-top:4px; padding:2px 6px; font-size:0.7rem;" onclick="deleteDay('${d}')">🗑️ Delete Day</button>
           </td>`;
         }
         rows += `<td><span class="badge ${BADGE[meal]}">${MLABEL[meal]}</span></td>
@@ -429,17 +429,17 @@ async function loadDbPreview() {
     });
     document.getElementById('dbPreview').innerHTML = `
       <table class="db-table">
-        <thead><tr><th>วันที่</th><th>มื้อ</th><th>รายการ</th><th>แคลอรี่</th></tr></thead>
+        <thead><tr><th>Date</th><th>Meal</th><th>Items</th><th>Calories</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
   } catch(e) {
     document.getElementById('dbPreview').innerHTML =
-      '<div style="color:var(--red);font-size:.82rem">โหลดไม่ได้: '+e.message+'</div>';
+      '<div style="color:var(--red);font-size:.82rem">Failed to load: '+e.message+'</div>';
   }
 }
 
 async function deleteDay(dateStr) {
-  if (!confirm(`ยืนยันการลบข้อมูลเมนูของวันที่ ${dateStr} ทั้งหมด?`)) return;
+  if (!confirm(`Are you sure you want to delete all menu data for ${dateStr}?`)) return;
   try {
     const res = await fetch('/api/menu/delete-day', {
       method: 'POST',
@@ -448,23 +448,23 @@ async function deleteDay(dateStr) {
     });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error);
-    setStatus(`✅ ลบข้อมูลวันที่ ${dateStr} เรียบร้อยแล้ว`, 'success');
+    setStatus(`✅ Deleted data for ${dateStr} successfully`, 'success');
     loadDbPreview();
   } catch(e) {
-    setStatus('❌ ลบข้อมูลไม่สำเร็จ: '+e.message, 'error');
+    setStatus('❌ Delete failed: '+e.message, 'error');
   }
 }
 
 async function deleteAll() {
-  if (!confirm(`⚠️ คำเตือน: คุณแน่ใจหรือไม่ที่จะลบข้อมูลเมนู "ทั้งหมด" ออกจากระบบ?\n(การกระทำนี้ไม่สามารถกู้คืนได้)`)) return;
+  if (!confirm(`⚠️ Warning: Are you sure you want to delete ALL menu data from the system?\n(This action cannot be undone)`)) return;
   try {
     const res = await fetch('/api/menu/delete-all', { method: 'POST' });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error);
-    setStatus(`✅ ลบข้อมูลทั้งหมดเรียบร้อยแล้ว`, 'success');
+    setStatus(`✅ Deleted all data successfully`, 'success');
     loadDbPreview();
   } catch(e) {
-    setStatus('❌ ลบข้อมูลไม่สำเร็จ: '+e.message, 'error');
+    setStatus('❌ Delete failed: '+e.message, 'error');
   }
 }
 

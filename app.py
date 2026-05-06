@@ -167,7 +167,7 @@ def parse_with_gemini(mime_type, data_b64):
             continue
     else:
         # If all models failed
-        raise Exception(f"AI Error: {last_error}. โควต้าใช้งาน AI เต็ม (Gemini API 429) กรุณาลองใหม่พรุ่งนี้ หรือเปลี่ยน API Key ใน .env")
+        raise Exception(f"AI Error: {last_error}. AI Quota exceeded (Gemini API 429). Please try again tomorrow or change the API Key in .env.")
 
     # Clean the response text (same as before)
     
@@ -200,18 +200,18 @@ def sync_menu_from_school():
     monday_str = monday.strftime("%Y-%m-%d")
     
     with get_db() as conn:
-        # 1. เช็คว่ามีข้อมูลของสัปดาห์นี้หรือยัง
+        # 1. Check if data for this week already exists
         row = execute_db(conn, 'SELECT 1 FROM menu_data WHERE date = ? LIMIT 1', (monday_str,)).fetchone()
         if row: return
 
-        # 2. เช็ค Cooldown
+        # 2. Check Cooldown
         log = execute_db(conn, 'SELECT last_sync FROM sync_logs WHERE key = ?', (monday_str,)).fetchone()
         if log:
             last_time = datetime.fromisoformat(log[0] if isinstance(log, tuple) else log['last_sync'])
             if datetime.now() - last_time < timedelta(hours=1):
                 return
 
-        # บันทึกว่ากำลังพยายามดึง (ใช้ ON CONFLICT แทน INSERT OR REPLACE)
+        # Log sync attempt (Using ON CONFLICT instead of INSERT OR REPLACE)
         execute_db(conn, '''
             INSERT INTO sync_logs (key, last_sync) VALUES (?, ?)
             ON CONFLICT(key) DO UPDATE SET last_sync = excluded.last_sync
@@ -396,7 +396,7 @@ def api_fetch_url_menu():
         
         resp = requests.get(pdf_url, timeout=30)
         if resp.status_code == 404:
-            return jsonify({'error': f'ไม่พบไฟล์ PDF บนเว็บไซต์ (URL: {pdf_url})'}), 404
+            return jsonify({'error': f'PDF file not found on the website (URL: {pdf_url})'}), 404
         resp.raise_for_status()
         
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')

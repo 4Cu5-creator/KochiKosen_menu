@@ -250,7 +250,7 @@
 let MENU_DATA = {};
 let DAYS = [];
 const DAY_JP = ['月','火','水','木','金','土','日'];
-const DAY_TH = ['จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์','อาทิตย์'];
+const DAY_TH = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const MEALS = [
   {key:'朝食', label:'Morning', tag:'asa', badge:'badge-asa'},
   {key:'昼食', label:'Noon', tag:'hiru', badge:'badge-hiru'},
@@ -307,13 +307,13 @@ function renderDay() {
 
   let html = `
     <div class="section-title">
-      ${d.getDate()} <span class="day-jp">${DAY_JP[wi]}曜日 / วัน${DAY_TH[wi]}</span>
+      ${d.getDate()} <span class="day-jp">${DAY_JP[wi]}曜日 / ${DAY_TH[wi]}</span>
     </div>
     <div class="meal-grid">
   `;
 
   if (!dayData || !Object.keys(dayData).length) {
-    html += '<div class="status-msg"><p>🍵 ยังไม่มีข้อมูลเมนูสำหรับวันนี้ครับ</p></div>';
+    html += '<div class="status-msg"><p>🍵 No menu data available for this day yet.</p></div>';
   } else {
     MEALS.forEach((meal, idx) => {
       const info = dayData[meal.key];
@@ -387,7 +387,7 @@ async function init() {
   if (!DAYS.length) {
     document.getElementById('mainContent').innerHTML = `
       <div class="status-msg">
-        <p>ไม่มีข้อมูลเมนูในระบบ<br>กรุณาอัปโหลดผ่านหน้า Admin</p>
+        <p>No menu data in the system.<br>Please upload via Admin panel.</p>
         <br><a href="/admin" style="color:var(--primary); text-decoration:none; font-weight:600;">Settings ⚙️</a>
       </div>`;
     return;
