@@ -3,3 +3,4 @@ requests>=2.31.0
 Werkzeug>=2.3.0
 python-dotenv
 gunicorn
+psycopg2-binary

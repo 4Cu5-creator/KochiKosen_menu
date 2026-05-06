@@ -1,5 +1,11 @@
 from flask import Flask, render_template, request, jsonify
 import sqlite3, os, json, base64, re, requests
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    HAS_PSYCOPG2 = True
+except ImportError:
+    HAS_PSYCOPG2 = False
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -25,28 +31,72 @@ ALLOWED_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'}
 # Database
 # -------------------------------------------------------------------------
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    db_url = os.environ.get('DATABASE_URL')
+    if db_url:
+        if not HAS_PSYCOPG2:
+            raise ImportError("psycopg2 is required for PostgreSQL but not installed. Install with 'pip install psycopg2-binary'")
+        # Use PostgreSQL (Production/Supabase)
+        # Handle Render's postgres:// vs postgresql:// issue
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql://", 1)
+        conn = psycopg2.connect(db_url)
+        conn.autocommit = True
+        return conn
+    else:
+        # Use SQLite (Local)
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+def execute_db(conn, query, params=()):
+    """Wrapper to handle differences between SQLite (?) and PostgreSQL (%s)"""
+    is_pg = HAS_PSYCOPG2 and not isinstance(conn, sqlite3.Connection)
+    if is_pg:
+        query = query.replace('?', '%s')
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(query, params)
+        return cur
+    else:
+        return conn.execute(query, params)
 
 def init_db():
-    with get_db() as conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS menu_data (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                date       TEXT    NOT NULL,
-                meal_type  TEXT    NOT NULL,
-                main_dish  TEXT    DEFAULT '',
-                items      TEXT    DEFAULT '[]',
-                kcal       TEXT    DEFAULT '',
-                updated_at TEXT    DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(date, meal_type)
-            )
-        ''')
-        # ตารางเก็บ log การ sync เพื่อทำ Cooldown
-        conn.execute('''CREATE TABLE IF NOT EXISTS sync_logs (
-                            key TEXT PRIMARY KEY, last_sync TEXT)''')
-        conn.commit()
+    conn = get_db()
+    is_pg = HAS_PSYCOPG2 and not isinstance(conn, sqlite3.Connection)
+    
+    # Text types and syntax are slightly different but compatible for basic usage
+    sql_menu = '''
+        CREATE TABLE IF NOT EXISTS menu_data (
+            id         SERIAL PRIMARY KEY if_not_exists_placeholder,
+            date       TEXT    NOT NULL,
+            meal_type  TEXT    NOT NULL,
+            main_dish  TEXT    DEFAULT '',
+            items      TEXT    DEFAULT '[]',
+            kcal       TEXT    DEFAULT '',
+            updated_at TEXT    DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(date, meal_type)
+        )
+    '''
+    # Adjust for SQLite/Postgres differences in SERIAL/AUTOINCREMENT
+    if is_pg:
+        sql_menu = sql_menu.replace("id         SERIAL PRIMARY KEY if_not_exists_placeholder", "id SERIAL PRIMARY KEY")
+        sql_sync = "CREATE TABLE IF NOT EXISTS sync_logs (key TEXT PRIMARY KEY, last_sync TEXT)"
+    else:
+        sql_menu = sql_menu.replace("id         SERIAL PRIMARY KEY if_not_exists_placeholder", "id INTEGER PRIMARY KEY AUTOINCREMENT")
+        sql_sync = "CREATE TABLE IF NOT EXISTS sync_logs (key TEXT PRIMARY KEY, last_sync TEXT)"
+
+    try:
+        if is_pg:
+            cur = conn.cursor()
+            cur.execute(sql_menu)
+            cur.execute(sql_sync)
+            conn.commit()
+            cur.close()
+        else:
+            conn.execute(sql_menu)
+            conn.execute(sql_sync)
+            conn.commit()
+    finally:
+        conn.close()
 
 init_db()
 
@@ -64,7 +114,7 @@ def parse_with_gemini(mime_type, data_b64):
     prompt = (
         "You are an expert data extractor. Extract the menu from this Japanese cafeteria (食堂) weekly menu image or pdf.\n"
         "Return ONLY a valid JSON object matching the exact format below, without any markdown formatting.\n"
-        '{"days":[{"date":"2024-01-01",'
+        '{"days":[{"date":"2026-05-04",'
         '"朝食":{"main":"ライス / パン","items":["Item 1", "Item 2"],"kcal":"1100kcal"},'
         '"昼食":{"main":"","items":["Dish A"],"kcal":"900kcal"},'
         '"夕食":{"main":"","items":["Dish B"],"kcal":"950kcal"}}]}\n'
@@ -89,21 +139,37 @@ def parse_with_gemini(mime_type, data_b64):
         }
     }
 
-    # Using v1beta with Gemini 2.0 Flash (Stable version for 2026)
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}'
-           
-    session = requests.Session()
-    resp = session.post(url, json=body, timeout=60)
+    # List of models to try in order
+    models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest']
     
-    # Detailed logging for debugging
-    with open(os.path.join(BASE_DIR, 'debug_api.txt'), 'a', encoding='utf-8') as f:
-        f.write(f"--- {datetime.now()} ---\nStatus: {resp.status_code}\nResponse: {resp.text}\n---\n")
-    
-    if resp.status_code == 429:
-        raise Exception("AI Rate Limit: โควต้าใช้งาน AI เต็มชั่วคราว (Gemini API 429) กรุณาลองใหม่ในภายหลังหรือเปลี่ยน API Key")
-    
-    resp.raise_for_status()
-    text = resp.json()['candidates'][0]['content']['parts'][0]['text']
+    last_error = ""
+    for model in models:
+        url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}'
+        
+        try:
+            session = requests.Session()
+            resp = session.post(url, json=body, timeout=60)
+            
+            # Detailed logging
+            with open(os.path.join(BASE_DIR, 'debug_api.txt'), 'a', encoding='utf-8') as f:
+                f.write(f"--- {datetime.now()} | Model: {model} ---\nStatus: {resp.status_code}\nResponse: {resp.text}\n---\n")
+            
+            if resp.status_code == 200:
+                text = resp.json()['candidates'][0]['content']['parts'][0]['text']
+                break # Success!
+            elif resp.status_code == 429:
+                last_error = "AI Quota Full (429)"
+                continue # Try next model
+            else:
+                resp.raise_for_status()
+        except Exception as e:
+            last_error = str(e)
+            continue
+    else:
+        # If all models failed
+        raise Exception(f"AI Error: {last_error}. โควต้าใช้งาน AI เต็ม (Gemini API 429) กรุณาลองใหม่พรุ่งนี้ หรือเปลี่ยน API Key ใน .env")
+
+    # Clean the response text (same as before)
     
     cleaned_text = text.strip()
     if cleaned_text.startswith('```json'):
@@ -135,20 +201,22 @@ def sync_menu_from_school():
     
     with get_db() as conn:
         # 1. เช็คว่ามีข้อมูลของสัปดาห์นี้หรือยัง
-        row = conn.execute('SELECT 1 FROM menu_data WHERE date = ? LIMIT 1', (monday_str,)).fetchone()
+        row = execute_db(conn, 'SELECT 1 FROM menu_data WHERE date = ? LIMIT 1', (monday_str,)).fetchone()
         if row: return
 
-        # 2. เช็ค Cooldown (ถ้าเคยดึงแล้วพลาด ไม่ต้องดึงซ้ำทุกวินาที)
-        log = conn.execute('SELECT last_sync FROM sync_logs WHERE key = ?', (monday_str,)).fetchone()
+        # 2. เช็ค Cooldown
+        log = execute_db(conn, 'SELECT last_sync FROM sync_logs WHERE key = ?', (monday_str,)).fetchone()
         if log:
-            last_time = datetime.fromisoformat(log[0])
+            last_time = datetime.fromisoformat(log[0] if isinstance(log, tuple) else log['last_sync'])
             if datetime.now() - last_time < timedelta(hours=1):
-                return # ยังไม่ถึงเวลาลองใหม่ (Cooldown 1 ชม.)
+                return
 
-        # บันทึกว่ากำลังพยายามดึง
-        conn.execute('INSERT OR REPLACE INTO sync_logs (key, last_sync) VALUES (?, ?)', 
-                     (monday_str, datetime.now().isoformat()))
-        conn.commit()
+        # บันทึกว่ากำลังพยายามดึง (ใช้ ON CONFLICT แทน INSERT OR REPLACE)
+        execute_db(conn, '''
+            INSERT INTO sync_logs (key, last_sync) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET last_sync = excluded.last_sync
+        ''', (monday_str, datetime.now().isoformat()))
+        if hasattr(conn, 'commit'): conn.commit()
 
     # 3. Proceed with sync
     url_date = monday.strftime("%Y%m%d")
@@ -169,7 +237,7 @@ def sync_menu_from_school():
                             info = day.get(meal_type)
                             if info:
                                 items_json = json.dumps(info.get('items', []), ensure_ascii=False)
-                                conn.execute('''
+                                execute_db(conn, '''
                                     INSERT INTO menu_data (date, meal_type, main_dish, items, kcal, updated_at)
                                     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                                     ON CONFLICT(date, meal_type) DO UPDATE SET
@@ -179,8 +247,11 @@ def sync_menu_from_school():
                                         updated_at = CURRENT_TIMESTAMP
                                 ''', (d, meal_type, info.get('main', ''), items_json, info.get('kcal', '')))
                     
-                    conn.execute('INSERT INTO sync_logs (date_monday, status) VALUES (?, ?)', (monday_str, 'success'))
-                    conn.commit()
+                    execute_db(conn, '''
+                        INSERT INTO sync_logs (key, last_sync) VALUES (?, ?)
+                        ON CONFLICT(key) DO UPDATE SET last_sync = excluded.last_sync
+                    ''', (f"{monday_str}_status", "success"))
+                    if hasattr(conn, 'commit'): conn.commit()
                     print(f"Auto-sync successful for {monday_str}")
         else:
             with get_db() as conn:
@@ -190,9 +261,11 @@ def sync_menu_from_school():
     except Exception as e:
         print(f"Auto-sync failed for {pdf_url}: {e}")
         with get_db() as conn:
-            conn.execute('INSERT INTO sync_logs (date_monday, status, error_msg) VALUES (?, ?, ?)', 
-                         (monday_str, 'error', str(e)))
-            conn.commit()
+            execute_db(conn, '''
+                INSERT INTO sync_logs (key, last_sync) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET last_sync = excluded.last_sync
+            ''', (f"{monday_str}_error", str(e)[:100]))
+            if hasattr(conn, 'commit'): conn.commit()
 
 # -------------------------------------------------------------------------
 # Pages
@@ -214,19 +287,27 @@ def api_get_menu():
     sync_menu_from_school()
 
     with get_db() as conn:
-        rows = conn.execute(
+        rows = execute_db(conn, 
             'SELECT date, meal_type, main_dish, items, kcal FROM menu_data ORDER BY date'
         ).fetchall()
     result = {}
     for row in rows:
-        d = row['date']
+        d = row[0] if isinstance(row, tuple) else row['date']
+        mtype = row[1] if isinstance(row, tuple) else row['meal_type']
         if d not in result:
             result[d] = {}
-        result[d][row['meal_type']] = {
-            'main':  row['main_dish'],
-            'items': json.loads(row['items']),
-            'kcal':  row['kcal'],
+        
+        # Determine values based on row type (Postgres RealDictCursor vs SQLite Row)
+        main = row[2] if isinstance(row, tuple) else row['main_dish']
+        items = row[3] if isinstance(row, tuple) else row['items']
+        kcal = row[4] if isinstance(row, tuple) else row['kcal']
+
+        result[d][mtype] = {
+            'main':  main,
+            'items': json.loads(items),
+            'kcal':  kcal,
         }
+    if not isinstance(conn, sqlite3.Connection): conn.close()
     return jsonify(result)
 
 @app.route('/api/menu/save', methods=['POST'])
@@ -239,7 +320,7 @@ def api_save_menu():
         for date, meals in data.items():
             for meal_type, info in meals.items():
                 items_json = json.dumps(info.get('items', []), ensure_ascii=False)
-                conn.execute('''
+                execute_db(conn, '''
                     INSERT INTO menu_data (date, meal_type, main_dish, items, kcal, updated_at)
                     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(date, meal_type) DO UPDATE SET
@@ -250,7 +331,8 @@ def api_save_menu():
                 ''', (date, meal_type,
                       info.get('main', ''), items_json, info.get('kcal', '')))
                 saved += 1
-        conn.commit()
+        if hasattr(conn, 'commit'): conn.commit()
+    if not isinstance(conn, sqlite3.Connection): conn.close()
     return jsonify({'success': True, 'saved': saved})
 
 @app.route('/api/menu/delete-day', methods=['POST'])
@@ -259,15 +341,17 @@ def api_delete_day():
     if not date:
         return jsonify({'error': 'No date provided'}), 400
     with get_db() as conn:
-        conn.execute('DELETE FROM menu_data WHERE date = ?', (date,))
-        conn.commit()
+        execute_db(conn, 'DELETE FROM menu_data WHERE date = ?', (date,))
+        if hasattr(conn, 'commit'): conn.commit()
+    if not isinstance(conn, sqlite3.Connection): conn.close()
     return jsonify({'success': True})
 
 @app.route('/api/menu/delete-all', methods=['POST'])
 def api_delete_all():
     with get_db() as conn:
-        conn.execute('DELETE FROM menu_data')
-        conn.commit()
+        execute_db(conn, 'DELETE FROM menu_data')
+        if hasattr(conn, 'commit'): conn.commit()
+    if not isinstance(conn, sqlite3.Connection): conn.close()
     return jsonify({'success': True})
 
 @app.route('/api/parse-image', methods=['POST'])
