@@ -9,11 +9,14 @@ except ImportError:
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from functools import wraps
+from flask import session, redirect
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-me')
 
 # -------------------------------------------------------------------------
 # GEMINI API Key (Loaded from .env)
@@ -147,8 +150,8 @@ def parse_with_gemini(mime_type, data_b64):
         url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}'
         
         try:
-            session = requests.Session()
-            resp = session.post(url, json=body, timeout=60)
+            http_session = requests.Session()
+            resp = http_session.post(url, json=body, timeout=60)
             
             # Detailed logging
             with open(os.path.join(BASE_DIR, 'debug_api.txt'), 'a', encoding='utf-8') as f:
@@ -255,9 +258,11 @@ def sync_menu_from_school():
                     print(f"Auto-sync successful for {monday_str}")
         else:
             with get_db() as conn:
-                conn.execute('INSERT INTO sync_logs (date_monday, status, error_msg) VALUES (?, ?, ?)', 
-                             (monday_str, 'error', f'HTTP {resp.status_code}'))
-                conn.commit()
+                execute_db(conn, '''
+                    INSERT INTO sync_logs (key, last_sync) VALUES (?, ?)
+                    ON CONFLICT(key) DO UPDATE SET last_sync = excluded.last_sync
+                ''', (f"{monday_str}_error", f'HTTP {resp.status_code}'))
+                if hasattr(conn, 'commit'): conn.commit()
     except Exception as e:
         print(f"Auto-sync failed for {pdf_url}: {e}")
         with get_db() as conn:
@@ -268,13 +273,42 @@ def sync_menu_from_school():
             if hasattr(conn, 'commit'): conn.commit()
 
 # -------------------------------------------------------------------------
+# Auth
+# -------------------------------------------------------------------------
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'changeme')
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('admin_logged_in'):
+            return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated
+
+# -------------------------------------------------------------------------
 # Pages
 # -------------------------------------------------------------------------
 @app.route('/')
 def menu_view():
     return render_template('menu.html')
 
+@app.route('/login', methods=['GET', 'POST'])
+def login_view():
+    error = None
+    if request.method == 'POST':
+        if request.form.get('password') == ADMIN_PASSWORD:
+            session['admin_logged_in'] = True
+            return redirect('/admin')
+        error = 'Wrong password'
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+def logout():
+    session.pop('admin_logged_in', None)
+    return redirect('/')
+
 @app.route('/admin')
+@login_required
 def admin():
     return render_template('admin.html')
 
@@ -419,3 +453,4 @@ def api_fetch_url_menu():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
